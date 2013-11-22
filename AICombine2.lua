@@ -7,7 +7,6 @@ function AICombine2.prerequisitesPresent(specializations)
 end;	
 	
 function AICombine2:load(xmlFile)	
-	print("this is a test");
 	self.startAIThreshing = SpecializationUtil.callSpecializationsFunction("startAIThreshing");
 	self.stopAIThreshing = SpecializationUtil.callSpecializationsFunction("stopAIThreshing");
 	self.setAIImplementsMoveDown = SpecializationUtil.callSpecializationsFunction("setAIImplementsMoveDown");
