@@ -301,13 +301,14 @@ function AICombine2:onLeave()
 end;	
 	
 function AICombine2.updateAIMovement(self, dt)	
-	
-	if not self:getIsAIThreshingAllowed() then	
+	mX,mY,mZ = getWorldTranslation(self.components[2]);
+	print(mX..", "..mY..", "..mZ);
+	if not self:getIsAIThreshingAllowed() then	--stop if not allowed
 		self:stopAIThreshing();	
 		return;	
 	end;	
 	
-	if not self.isControlled then	
+	if not self.isControlled then	--lights if dark
 		if g_currentMission.environment.needsLights then	
 			self:setLightsVisibility(true);	
 		else	
@@ -316,7 +317,7 @@ function AICombine2.updateAIMovement(self, dt)
 	end;	
 	
 	local allowedToDrive = true;	
-	if self.grainTankCapacity == 0 then	
+	if self.grainTankCapacity == 0 then	--if chopper or combine full, wait for trailer
 		if not self.pipeStateIsUnloading[self.currentPipeState] then	
 			allowedToDrive = false;	
 		end	
@@ -330,7 +331,7 @@ function AICombine2.updateAIMovement(self, dt)
 		end	
 	end	
 	
-	if self.waitingForTrailerToUnload then	
+	if self.waitingForTrailerToUnload then	--?continue work when unloading??
 		if self.lastValidGrainTankFruitType ~= FruitUtil.FRUITTYPE_UNKNOWN then	
 			local trailer = self:findTrailerToUnload(self.lastValidGrainTankFruitType);
 			if trailer ~= nil then	
@@ -343,21 +344,21 @@ function AICombine2.updateAIMovement(self, dt)
 		end;	
 	end;	
 	
-	if (self.grainTankFillLevel >= self.grainTankCapacity and self.grainTankCapacity > 0) or self.waitingForTrailerToUnload or self.waitingForDischarge then
+	if (self.grainTankFillLevel >= self.grainTankCapacity and self.grainTankCapacity > 0) or self.waitingForTrailerToUnload or self.waitingForDischarge then --stop when full or no trailer
 		allowedToDrive = false;	
 	end;	
-	for _,v in pairs(self.numCollidingVehicles) do	
+	for _,v in pairs(self.numCollidingVehicles) do	--stop for traffic
 		if v > 0 then	
 			allowedToDrive = false;	
 		break;	
 		end;	
 	end;	
-	if self.turnStage > 0 then	
+	if self.turnStage > 0 then	--turning
 		if self.waitForTurnTime > self.time or (self.pipeIsUnloading and self.turnStage < 3) then
 			allowedToDrive = false;	
 		end;	
 	end;	
-	if not self:getIsThreshingAllowed(true) then	
+	if not self:getIsThreshingAllowed(true) then	--weather
 		allowedToDrive = false;	
 		self:setIsThreshing(false);	
 		self.waitingForWeather = true;	
@@ -370,7 +371,7 @@ function AICombine2.updateAIMovement(self, dt)
 			self.waitingForWeather = false;	
 		end;	
 	end;	
-	if not allowedToDrive then	
+	if not allowedToDrive then	--stop
 		--local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
 		--local lx, lz = 0, 1; --AIVehicleUtil.getDriveDirection(self.aiTreshingDirectionNode, self.aiThreshingTargetX, y, self.aiThreshingTargetZ);
 		--AIVehicleUtil.driveInDirection(self, dt, 30, 0, 0, 28, FALSE, moveForwards, lx, lz)
@@ -384,10 +385,10 @@ function AICombine2.updateAIMovement(self, dt)
 	local rightMarker = self.aiRightMarker;	
 	local hasFruitPreparer = false;	
 	local fruitType = self.lastValidInputFruitType;	
-	if self.fruitPreparerFruitType ~= nil and self.fruitPreparerFruitType == fruitType then
+	if self.fruitPreparerFruitType ~= nil and self.fruitPreparerFruitType == fruitType then --beet and potatoes?
 		hasFruitPreparer = true;	
 	end	
-	for cutter,implement in pairs(self.attachedCutters) do	
+	for cutter,implement in pairs(self.attachedCutters) do	--get markers from cutter
 		if cutter.aiLeftMarker ~= nil and leftMarker == nil then	
 			leftMarker = cutter.aiLeftMarker;	
 		end;	
@@ -399,12 +400,12 @@ function AICombine2.updateAIMovement(self, dt)
 		end;	
 	end;	
 	
-	if leftMarker == nil or rightMarker == nil then	
+	if leftMarker == nil or rightMarker == nil then	--stop if no markers
 		self:stopAIThreshing();	
 		return;	
 	end;	
 	
-	if self.driveBackTime >= self.time then	
+	if self.driveBackTime >= self.time then	--not sure
 		local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
 		local lx, lz = AIVehicleUtil.getDriveDirection(self.aiTreshingDirectionNode, self.aiThreshingTargetX, y, self.aiThreshingTargetZ);
 		AIVehicleUtil.driveInDirection(self, dt, 30, 0, 0, 28, true, false, lx, lz, speedLevel, 1)
@@ -412,7 +413,7 @@ function AICombine2.updateAIMovement(self, dt)
 	end;	
 	
 	local hasArea = true;	
-	if self.lastArea < 1 then	
+	if self.lastArea < 1 then --no area at cutter	
 		local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
 		local dirX, dirZ = self.aiThreshingDirectionX, self.aiThreshingDirectionZ;	
 		local lInX,  lInY,  lInZ = getWorldTranslation(leftMarker);	
@@ -420,11 +421,11 @@ function AICombine2.updateAIMovement(self, dt)
 		local heightX = lInX + dirX * self.frontAreaSize;	
 		local heightZ = lInZ + dirZ * self.frontAreaSize;	
 		local area = Utils.getFruitArea(fruitType, lInX, lInZ, rInX, rInZ, heightX, heightZ, hasFruitPreparer);
-		if area < 1 then	
+		if area < 1 then	--no area in front
 			hasArea = false;	
 		end;	
 	end;	
-	if hasArea then	
+	if hasArea then	--turn timer
 		self.turnTimer = self.turnTimeout;	
 	else	
 		self.turnTimer = self.turnTimer - dt;	
@@ -437,16 +438,15 @@ function AICombine2.updateAIMovement(self, dt)
 	local updateWheels = true;	
 	
 	
-	if self.turnTimer < 0 or self.turnStage > 0 then	
-		if self.turnStage > 0 then				print("1");
-			local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
+	if self.turnTimer < 0 or self.turnStage > 0 then --enter turn sequence
+		if self.turnStage > 0 then				local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
 			local dirX, dirZ = self.aiThreshingDirectionX, self.aiThreshingDirectionZ;
 			local myDirX, myDirY, myDirZ = localDirectionToWorld(self.aiTreshingDirectionNode, 0, 0, 1);
 	
 			newTargetX = self.aiThreshingTargetX;	
 			newTargetY = y;	
 			newTargetZ = self.aiThreshingTargetZ;	
-			if self.turnStage == 1 then	
+			if self.turnStage == 1 then	--turn
 				self.turnStageTimer = self.turnStageTimer - dt;	
 				if self.lastSpeed < self.aiRescueSpeedThreshold then	
 					self.aiRescueTimer = self.aiRescueTimer - dt;	
@@ -472,7 +472,7 @@ function AICombine2.updateAIMovement(self, dt)
 					end;	
 					self.aiRescueTimer = self.aiRescueTimeout;	
 				end;	
-			elseif self.turnStage == 2 then	
+			elseif self.turnStage == 2 then	-- back up
 				self.turnStageTimer = self.turnStageTimer - dt;	
 				if self.lastSpeed < self.aiRescueSpeedThreshold then	
 					self.aiRescueTimer = self.aiRescueTimer - dt;	
@@ -480,11 +480,11 @@ function AICombine2.updateAIMovement(self, dt)
 					self.aiRescueTimer = self.aiRescueTimeout;	
 				end;	
 				if myDirX*dirX + myDirZ*dirZ > self.turnStage2AngleCosThreshold orself.turnStageTimer < 0 or self.aiRescueTimer < 0 then
-					AICombine2.switchToTurnStage3(self);	
+					AICombine2.switchToTurnStage3(self);	--set stage 3 lower cutter
 				else	
 					moveForwards = false;	
 				end;	
-			elseif self.turnStage == 3 then	
+			elseif self.turnStage == 3 then	--stage 3
 				--[[if Utils.vector2Length(x-newTargetX, z-newTargetZ) < self.turnEndDistance then
 				self.turnTimer = self.turnTimeoutLong;	
 				self.turnStage = 0;	
@@ -497,7 +497,7 @@ function AICombine2.updateAIMovement(self, dt)
 				end;	
 				local dx, dz = x-newTargetX, z-newTargetZ;	
 				local dot = dx*dirX + dz*dirZ;	
-				if -dot < self.turnEndDistance then	
+				if -dot < self.turnEndDistance then	--turn complete
 					self.turnTimer = self.turnTimeoutLong;	
 					self.turnStage = 0;	
 				elseif self.aiRescueTimer < 0 then	
@@ -511,7 +511,7 @@ function AICombine2.updateAIMovement(self, dt)
 					self.turnStage = 4;	
 					self.turnStageTimer = self.turnStage4Timeout;	
 				end;	
-			elseif self.turnStage == 4 then	
+			elseif self.turnStage == 4 then	--stage 4
 				self.turnStageTimer = self.turnStageTimer - dt;	
 				if self.lastSpeed < self.aiRescueSpeedThreshold then	
 					self.aiRescueTimer = self.aiRescueTimer - dt;	
@@ -546,11 +546,11 @@ function AICombine2.updateAIMovement(self, dt)
 					moveForwards = false;	
 				end;	
 			end;	
-		elseif fruitType == FruitUtil.FRUITTYPE_UNKNOWN then	
+		elseif fruitType == FruitUtil.FRUITTYPE_UNKNOWN then --stop if unknown fruit
 			self:stopAIThreshing();	
 			return;	
 		else	
-			-- turn	
+			-- find turn direction
 	
 			local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
 			local dirX, dirZ = self.aiThreshingDirectionX, self.aiThreshingDirectionZ;
