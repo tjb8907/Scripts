@@ -10,7 +10,8 @@ function AICombine2:load(xmlFile)
 	self.startAIThreshing = SpecializationUtil.callSpecializationsFunction("startAIThreshing");
 	self.stopAIThreshing = SpecializationUtil.callSpecializationsFunction("stopAIThreshing");
 	self.setAIImplementsMoveDown = SpecializationUtil.callSpecializationsFunction("setAIImplementsMoveDown");
-	self.onTrafficCollisionTrigger = AICombine2.onTrafficCollisionTrigger;	
+	self.onTraffic2CollisionTrigger = AICombine2.onTraffic2CollisionTrigger;	
+	self.onCombineCollisionTrigger = AICombine2.onCombineCollisionTrigger;	
 	self.canStartAIThreshing = AICombine2.canStartAIThreshing;	
 	self.getIsAIThreshingAllowed = AICombine2.getIsAIThreshingAllowed;	
 	
@@ -47,6 +48,7 @@ function AICombine2:load(xmlFile)
 	self.aiLeftMarker = Utils.indexToObject(self.components, getXMLString(xmlFile,"vehicle.aiLeftMarker#index"));
 	self.aiRightMarker = Utils.indexToObject(self.components, getXMLString(xmlFile, "vehicle.aiRightMarker#index"));
 	self.aiTrafficCollisionTrigger = Utils.indexToObject(self.components, getXMLString(xmlFile, "vehicle.aiTrafficCollisionTrigger#index"));
+	self.aiCombineCollisionTrigger = Utils.indexToObject(self.components, getXMLString(xmlFile, "vehicle.aiCombineCollisionTrigger#index"));
 	
 	self.aiTurnThreshWidthScale = Utils.getNoNil(getXMLFloat(xmlFile, "vehicle.aiTurnThreshWidthScale#value"), 0.9);
 	self.aiTurnThreshWidthMaxDifference = Utils.getNoNil(getXMLFloat(xmlFile, "vehicle.aiTurnThreshWidthMaxDifference#value"), 0.6); -- do at most a 0.6m overlap
@@ -231,7 +233,11 @@ function AICombine2:startAIThreshing(noEventSend)
 			local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
 			self.aiThreshingTargetX = x;	
 			self.aiThreshingTargetZ = z;	
-			AICombine2.addCollisionTrigger(self, self);	
+			print("traffic trig load")
+			print(self.aiTrafficCollisionTrigger)
+			print("load trigger")
+			print(self.aiCombineCollisionTrigger);
+			AICombine2:addCollisionTrigger(self, self);	
 		end;	
 		for _,implement in pairs(self.attachedImplements) do	
 			if implement.object ~= nil then	
@@ -240,7 +246,7 @@ function AICombine2:startAIThreshing(noEventSend)
 				end;	
 				implement.object:aiTurnOn();	
 				if self.isServer then	
-					AICombine2.addCollisionTrigger(self, implement.object);	
+					AICombine2:addCollisionTrigger(self, implement.object);	
 				end;	
 			end;
 		end;	
@@ -301,8 +307,7 @@ function AICombine2:onLeave()
 end;	
 	
 function AICombine2.updateAIMovement(self, dt)	
-	mX,mY,mZ = getWorldTranslation(self.components[2]);
-	print(mX..", "..mY..", "..mZ);
+		-- setTranslation(self.components[2].node, self.aiThreshingTargetX, mY, self.aiThreshingTargetZ);
 	if not self:getIsAIThreshingAllowed() then	--stop if not allowed
 		self:stopAIThreshing();	
 		return;	
@@ -347,10 +352,10 @@ function AICombine2.updateAIMovement(self, dt)
 	if (self.grainTankFillLevel >= self.grainTankCapacity and self.grainTankCapacity > 0) or self.waitingForTrailerToUnload or self.waitingForDischarge then --stop when full or no trailer
 		allowedToDrive = false;	
 	end;	
-	for _,v in pairs(self.numCollidingVehicles) do	--stop for traffic
+	for k,v in pairs(self.numCollidingVehicles) do	--stop for traffic
 		if v > 0 then	
 			allowedToDrive = false;	
-		break;	
+			break;	
 		end;	
 	end;	
 	if self.turnStage > 0 then	--turning
@@ -439,13 +444,15 @@ function AICombine2.updateAIMovement(self, dt)
 	
 	
 	if self.turnTimer < 0 or self.turnStage > 0 then --enter turn sequence
-		if self.turnStage > 0 then				local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
+		if self.turnStage > 0 then	
+			-- mX,mY,mZ = getWorldTranslation(self.components[2].node);
+			-- nX,nY,nZ = getWorldTranslation(self.components[1].node);			local x,y,z = getWorldTranslation(self.aiTreshingDirectionNode);	
 			local dirX, dirZ = self.aiThreshingDirectionX, self.aiThreshingDirectionZ;
 			local myDirX, myDirY, myDirZ = localDirectionToWorld(self.aiTreshingDirectionNode, 0, 0, 1);
-	
 			newTargetX = self.aiThreshingTargetX;	
 			newTargetY = y;	
-			newTargetZ = self.aiThreshingTargetZ;	
+			newTargetZ = self.aiThreshingTargetZ;
+			-- setTranslation(self.components[2].node, newTargetX, newTargetY, newTargetZ);
 			if self.turnStage == 1 then	--turn
 				self.turnStageTimer = self.turnStageTimer - dt;	
 				if self.lastSpeed < self.aiRescueSpeedThreshold then	
@@ -472,6 +479,49 @@ function AICombine2.updateAIMovement(self, dt)
 					end;	
 					self.aiRescueTimer = self.aiRescueTimeout;	
 				end;	
+			elseif self.turnStage == 0.5 then
+
+				-- print("turn stage 0.5")
+				-- print("ThreshingNodeLoc:"..nX..", "..nZ);
+				-- print("Old TargetX:"..self.aiThreshingTargetBeforeTurnX..", Old TargetZ:"..self.aiThreshingTargetBeforeTurnZ);
+				-- print("dirX:"..dirX..", DirZ:"..dirZ);
+				newTargetX = self.aiThreshingTargetBeforeTurnX - self.lookAheadDistance*dirX*0.5
+				newTargetZ = self.aiThreshingTargetBeforeTurnZ - self.lookAheadDistance*dirZ*0.5
+				self.targetXbackup = newTargetX
+				self.targetZbackup = newTargetZ
+				-- print("New TargetX:"..newTargetX..", New TargetZ:"..newTargetZ);
+				-- setTranslation(self.components[2].node, newTargetX, mY, newTargetZ);
+				local dx, dz = x-newTargetX, z-newTargetZ;	
+				local dot = dx*dirX + dz*dirZ;	
+				-- print("dot:"..dot)
+				if dot < 1 then	--turn complete
+					self.turnStage = 0.75;
+				end
+			elseif self.turnStage == 0.75 then
+				-- print("stage 0.75")
+				if dirX < 0.1 and dirX > -0.1 then
+					-- print("dirX")
+					-- print(dirX)
+					newTargetX = self.finalTargetX
+					newTargetZ = self.targetZbackup
+					-- print("x:"..newTargetX..",z:"..newTargetZ)
+				end
+				if dirZ < 0.1 and dirZ > -0.1 then
+					-- print("dirZ")
+					-- print(dirZ)
+					newTargetX = self.targetXbackup
+					newTargetZ = self.finalTargetZ
+				end
+				-- setTranslation(self.components[2].node, newTargetX, mY, newTargetZ);
+				local distance = Utils.vector2Length(newTargetX-x,newTargetZ-z);
+				-- print("distance = "..distance)
+				if distance < 1 then
+					newTargetX = self.finalTargetX
+					newTargetZ = self.finalTargetZ
+					-- setTranslation(self.components[2].node, newTargetX, mY, newTargetZ);
+					self.turnStage = 1
+					-- print("done")
+				end		
 			elseif self.turnStage == 2 then	-- back up
 				self.turnStageTimer = self.turnStageTimer - dt;	
 				if self.lastSpeed < self.aiRescueSpeedThreshold then	
@@ -479,7 +529,7 @@ function AICombine2.updateAIMovement(self, dt)
 				else	
 					self.aiRescueTimer = self.aiRescueTimeout;	
 				end;	
-				if myDirX*dirX + myDirZ*dirZ > self.turnStage2AngleCosThreshold orself.turnStageTimer < 0 or self.aiRescueTimer < 0 then
+				if myDirX*dirX + myDirZ*dirZ > self.turnStage2AngleCosThreshold or self.turnStageTimer < 0 or self.aiRescueTimer < 0 then
 					AICombine2.switchToTurnStage3(self);	--set stage 3 lower cutter
 				else	
 					moveForwards = false;	
@@ -561,17 +611,17 @@ function AICombine2.updateAIMovement(self, dt)
 			local threshWidth = Utils.vector2Length(lInX-rInX, lInZ-rInZ);	
 			local turnLeft = true;	
 				
-			local lWidthX = x - sideX*0.5*threshWidth + dirX * self.sideWatchDirOffset;
-			local lWidthZ = z - sideZ*0.5*threshWidth + dirZ * self.sideWatchDirOffset;
-			local lStartX = lWidthX - sideX*0.7*threshWidth;	
-			local lStartZ = lWidthZ - sideZ*0.7*threshWidth;	
+			local lWidthX = x - sideX*0.4*threshWidth + dirX * self.sideWatchDirOffset;
+			local lWidthZ = z - sideZ*0.4*threshWidth + dirZ * self.sideWatchDirOffset;
+			local lStartX = lWidthX - sideX*1.25*threshWidth;	
+			local lStartZ = lWidthZ - sideZ*1.25*threshWidth;	
 			local lHeightX = lStartX + dirX*self.sideWatchDirSize;	
 			local lHeightZ = lStartZ + dirZ*self.sideWatchDirSize;	
 	
-			local rWidthX = x + sideX*0.5*threshWidth + dirX * self.sideWatchDirOffset;
-			local rWidthZ = z + sideZ*0.5*threshWidth + dirZ * self.sideWatchDirOffset;
-			local rStartX = rWidthX + sideX*0.7*threshWidth;	
-			local rStartZ = rWidthZ + sideZ*0.7*threshWidth;	
+			local rWidthX = x + sideX*0.4*threshWidth + dirX * self.sideWatchDirOffset;
+			local rWidthZ = z + sideZ*0.4*threshWidth + dirZ * self.sideWatchDirOffset;
+			local rStartX = rWidthX + sideX*1.25*threshWidth;	
+			local rStartZ = rWidthZ + sideZ*1.25*threshWidth;	
 			local rHeightX = rStartX + dirX*self.sideWatchDirSize;	
 			local rHeightZ = rStartZ + dirZ*self.sideWatchDirSize;	
 		
@@ -610,15 +660,14 @@ function AICombine2.updateAIMovement(self, dt)
 			else	
 				markerSideOffset = math.min(markerSideOffset + areaOverlap, -0.01);
 			end	
-		
 			local x,z = Utils.projectOnLine(x, z, targetX, targetZ, dirX, dirZ)	
-			newTargetX = x-sideX*markerSideOffset;	
-			newTargetY = y;	
-			newTargetZ = z-sideZ*markerSideOffset;	
+			self.finalTargetX = x-sideX*markerSideOffset;	
+			self.finalTargetY = y;	
+			self.finalTargetZ = z-sideZ*markerSideOffset;	
 		
 			self.aiThreshingDirectionX = -dirX;	
 			self.aiThreshingDirectionZ = -dirZ;	
-			self.turnStage = 1;	
+			self.turnStage = 0.5;	
 			self.aiRescueTimer = self.aiRescueTimeout;	
 			self.turnStageTimer = self.turnStage1Timeout;	
 		
@@ -662,7 +711,6 @@ function AICombine2.updateAIMovement(self, dt)
 			AICombine2.switchToTurnStage3(self);	
 			moveForwards = true;	
 		end;	
-		
 		AIVehicleUtil.driveInDirection(self, dt, 25, 0.5, 0.5, 20, true, moveForwards, lx, lz, speedLevel, 0.9);
 		
 		--local maxAngle = 0.785398163; --45;	
@@ -719,12 +767,15 @@ function AICombine2:setAIImplementsMoveDown(moveDown)
 	end	
 end;	
 	
-function AICombine2.addCollisionTrigger(self, object)	
+function AICombine2:addCollisionTrigger(self, object)	
 	if self.isServer then	
 		if object.aiTrafficCollisionTrigger ~= nil then	
-			addTrigger(object.aiTrafficCollisionTrigger, "onTrafficCollisionTrigger", self);
+			addTrigger(object.aiTrafficCollisionTrigger, "onTraffic2CollisionTrigger", self);
 			self.numCollidingVehicles[object.aiTrafficCollisionTrigger] = 0;	
 		end	
+		if object.aiCombineCollisionTrigger ~= nil then
+			addTrigger(object.aiCombineCollisionTrigger, "onCombineCollisionTrigger", self);
+			self.numCollidingVehicles[object.aiCombineCollisionTrigger] = 0;		end;
 		if object ~= self then	
 			for _,v in pairs(object.components) do	
 				self.trafficCollisionIgnoreList[v.node] = true;	
@@ -739,6 +790,10 @@ function AICombine2:removeCollisionTrigger(object)
 			removeTrigger(object.aiTrafficCollisionTrigger);	
 			self.numCollidingVehicles[object.aiTrafficCollisionTrigger] = nil;	
 		end	
+		if object.aiCombineCollisionTrigger ~= nil then	
+			removeTrigger(object.aiCombineCollisionTrigger);	
+			self.numCollidingVehicles[object.aiCombineCollisionTrigger] = nil;	
+		end	
 		if object ~= self then	
 			for _,v in pairs(object.components) do	
 				self.trafficCollisionIgnoreList[v.node] = nil;	
@@ -752,7 +807,7 @@ function AICombine2:attachImplement(implement)
 	local object = implement.object;	
 	if object.attacherJoint.jointType == Vehicle.JOINTTYPE_CUTTER then	
 		if self.isAIThreshing and self.isServer then	
-			AICombine2.addCollisionTrigger(self, object);	
+			AICombine2:addCollisionTrigger(self, object);	
 		end;	
 	elseif object.attacherJoint.jointType == Vehicle.JOINTTYPE_TRAILER or object.attacherJoint.jointType == Vehicle.JOINTTYPE_TRAILERLOW then
 		self.numAttachedTrailers = self.numAttachedTrailers+1;	
@@ -772,7 +827,7 @@ function AICombine2:detachImplement(implementIndex)
 	end	
 end;	
 	
-function AICombine2:onTrafficCollisionTrigger(triggerId, otherId, onEnter, onLeave,	onStay, otherShapeId)
+function AICombine2:onTraffic2CollisionTrigger(triggerId, otherId, onEnter, onLeave,	onStay, otherShapeId)
 	if onEnter or onLeave then	
 		if g_currentMission.players[otherId] ~= nil then	
 			if onEnter then	
@@ -783,8 +838,24 @@ function AICombine2:onTrafficCollisionTrigger(triggerId, otherId, onEnter, onLea
 		else	
 			local vehicle = g_currentMission.nodeToVehicle[otherId];	
 			if vehicle ~= nil and self.trafficCollisionIgnoreList[otherId] == nil then
-				if onEnter then	
-					self.numCollidingVehicles[triggerId] = self.numCollidingVehicles[triggerId]+1;
+				if onEnter then						self.numCollidingVehicles[triggerId] = self.numCollidingVehicles[triggerId]+1;
+					print("otherId:"..otherId);
+					local name1 = g_currentMission.nodeToVehicle[otherId].name
+					print("name:"..name1)
+					-- print("trigger name:"..getName(otherId));
+					-- local parent = getParent(otherId)
+					-- print("parent id:"..parent);
+					-- print("parent name:"..getName(parent));
+					-- for k,v in pairs(g_currentMission.nodeToVehicle) do
+						-- print("k:");
+						-- print(k);
+						-- for s,t in pairs(g_currentMission.nodeToVehicle[k]) do
+							-- print("s:");
+							-- print(s);
+							-- print("t:");
+							-- print(t);
+						-- end;
+					-- end;
 				elseif onLeave then	
 					self.numCollidingVehicles[triggerId] = math.max(self.numCollidingVehicles[triggerId]-1, 0);
 				end;	
@@ -792,6 +863,42 @@ function AICombine2:onTrafficCollisionTrigger(triggerId, otherId, onEnter, onLea
 		end;	
 	end;	
 end;	
+function AICombine2:onCombineCollisionTrigger(triggerId, otherId, onEnter, onLeave,	onStay, otherShapeId)
+	if onEnter or onLeave then	
+		if g_currentMission.players[otherId] ~= nil then	
+			if onEnter then	
+				self.numCollidingVehicles[triggerId] = self.numCollidingVehicles[triggerId]+1;
+			elseif onLeave then	
+				self.numCollidingVehicles[triggerId] = math.max(self.numCollidingVehicles[triggerId]-1, 0);
+			end;	
+		else	
+			local vehicle = g_currentMission.nodeToVehicle[otherId];
+			if vehicle ~= nil then
+				local name1 = g_currentMission.nodeToVehicle[otherId].name
+				if onEnter and (name1 == "JD9750STS" or name1 == "JD640FD" or name1 == "JD9870STS") then	
+					self.numCollidingVehicles[triggerId] = self.numCollidingVehicles[triggerId]+1;
+					print("name:"..name1)
+					-- print("trigger name:"..getName(otherId));
+					-- local parent = getParent(otherId)
+					-- print("parent id:"..parent);
+					-- print("parent name:"..getName(parent));
+					-- for k,v in pairs(g_currentMission.nodeToVehicle) do
+						-- print("k:");
+						-- print(k);
+						-- for s,t in pairs(g_currentMission.nodeToVehicle[k]) do
+							-- print("s:");
+							-- print(s);
+							-- print("t:");
+							-- print(t);
+						-- end;
+					-- end;
+				elseif onLeave then	
+					self.numCollidingVehicles[triggerId] = math.max(self.numCollidingVehicles[triggerId]-1, 0);
+				end;	
+			end;	
+		end;	
+	end;	
+end;
 	
 function AICombine2.switchToTurnStage3(self)	
 	self.turnStage = 3;	
